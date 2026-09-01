@@ -1,0 +1,27 @@
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment Variables & Keys
+.env
+
+# Local Database & Vector Data (Keep .gitkeep)
+data/*.db
+data/*.json
+!data/.gitkeep
+
+# IDE / OS specific
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
