@@ -134,10 +134,3 @@ def render_hitl_card(key_prefix: str, initial_data: Dict[str, Any], accounts: Li
                 st.session_state["pending_hitl"] = None
                 st.toast("Discarded transaction.", icon="🗑️")
                 st.rerun()
-
-def render_scratchpad_expander(scratchpad: Optional[str]):
-    """Render transparent Chain-of-Thought expandable reasoning drawer."""
-    if scratchpad:
-        formatted = scratchpad.replace("\n", "<br>")
-        with st.expander("🧠 Agent Internal Reasoning (Chain-of-Thought CoT)", expanded=False):
-            st.markdown(f'<div class="scratchpad-box">{formatted}</div>', unsafe_allow_html=True)

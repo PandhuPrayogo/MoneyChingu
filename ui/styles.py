@@ -7,11 +7,92 @@ CUSTOM_CSS = """
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
-    /* Main Container Padding */
+    /* Main Container */
     .main .block-container {
-        padding-top: 1.5rem;
-        padding-bottom: 3rem;
-        max-width: 1200px;
+        padding-top: 1.2rem;
+        padding-bottom: 2.5rem;
+        max-width: 900px;
+    }
+
+    /* Hide sidebar completely */
+    [data-testid="collapsedControl"] { display: none; }
+    section[data-testid="stSidebar"] { display: none; }
+
+    /* ================= CHAT INPUT FOCUS OVERRIDE (WHITE / INDIGO INSTEAD OF RED) ================= */
+    [data-testid="stChatInput"] {
+        border-color: rgba(255, 255, 255, 0.2) !important;
+        border-radius: 14px !important;
+        background: rgba(30, 41, 59, 0.7) !important;
+        backdrop-filter: blur(12px) !important;
+    }
+    
+    [data-testid="stChatInput"]:focus-within {
+        border-color: #ffffff !important;
+        box-shadow: 0 0 12px rgba(255, 255, 255, 0.25) !important;
+    }
+
+    [data-testid="stChatInput"] textarea {
+        color: #f8fafc !important;
+        caret-color: #ffffff !important;
+    }
+
+    [data-testid="stChatInput"] textarea:focus {
+        border-color: #ffffff !important;
+        box-shadow: none !important;
+    }
+
+    [data-testid="stChatInput"] button {
+        color: #ffffff !important;
+    }
+
+    [data-testid="stChatInput"] button:hover {
+        background: rgba(255, 255, 255, 0.15) !important;
+    }
+
+    /* Override standard inputs focus from red to white */
+    .stTextInput input:focus, .stNumberInput input:focus, .stSelectbox [data-baseweb="select"] > div:focus-within {
+        border-color: #ffffff !important;
+        box-shadow: 0 0 8px rgba(255, 255, 255, 0.2) !important;
+    }
+
+    /* Header & Quick Stat Bar */
+    .chat-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 12px;
+        margin-bottom: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    
+    .header-pill {
+        background: rgba(99, 102, 241, 0.15);
+        border: 1px solid rgba(99, 102, 241, 0.35);
+        color: #a5b4fc;
+        padding: 5px 14px;
+        border-radius: 20px;
+        font-size: 0.88rem;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+    }
+
+    /* Suggestion Chips */
+    .suggestion-chip {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: #cbd5e1;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.82rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin: 4px 3px;
+    }
+    .suggestion-chip:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: #ffffff;
+        color: #ffffff;
     }
 
     /* Metric Cards */
@@ -19,78 +100,54 @@ CUSTOM_CSS = """
         background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 14px;
-        padding: 18px;
+        padding: 16px;
         backdrop-filter: blur(10px);
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
-        transition: transform 0.2s ease, border-color 0.2s ease;
+        transition: transform 0.2s ease;
     }
     .metric-card:hover {
         transform: translateY(-2px);
-        border-color: rgba(99, 102, 241, 0.4);
+        border-color: rgba(255, 255, 255, 0.3);
     }
     .metric-label {
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         font-weight: 500;
         color: #94a3b8;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
     .metric-value {
-        font-size: 1.6rem;
+        font-size: 1.5rem;
         font-weight: 700;
         margin-top: 4px;
         color: #f8fafc;
     }
     .metric-sub {
-        font-size: 0.8rem;
+        font-size: 0.78rem;
         margin-top: 4px;
     }
     .positive-text { color: #10b981; }
-    .negative-text { color: #ef4444; }
-    .neutral-text { color: #6366f1; }
+    .negative-text { color: #ffffff; }
+    .neutral-text { color: #818cf8; }
 
     /* HITL Confirmation Box */
     .hitl-container {
-        background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.05));
-        border: 1.5px solid #6366f1;
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.06));
+        border: 1.5px solid #818cf8;
         border-radius: 14px;
-        padding: 20px;
-        margin: 15px 0;
+        padding: 18px;
+        margin: 12px 0;
         box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.2);
     }
     .hitl-title {
-        font-size: 1.05rem;
+        font-size: 1rem;
         font-weight: 600;
-        color: #818cf8;
+        color: #c7d2fe;
         display: flex;
         align-items: center;
         gap: 8px;
         margin-bottom: 12px;
     }
-
-    /* CoT Scratchpad Collapsible */
-    .scratchpad-box {
-        background: rgba(15, 23, 42, 0.6);
-        border-left: 3px solid #8b5cf6;
-        padding: 10px 14px;
-        border-radius: 0 8px 8px 0;
-        font-family: monospace;
-        font-size: 0.85rem;
-        color: #cbd5e1;
-        margin-bottom: 10px;
-    }
-
-    /* Badges */
-    .badge-pill {
-        display: inline-block;
-        padding: 3px 10px;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-    }
-    .badge-usd { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
-    .badge-idr { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
 
     /* Custom Scrollbars */
     ::-webkit-scrollbar {

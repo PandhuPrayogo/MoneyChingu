@@ -42,9 +42,9 @@ class TestAgentCore(unittest.TestCase):
     def test_system_prompt_grounding(self):
         snapshot = context_manager.get_live_context_snapshot("USD")
         prompt = format_system_prompt_with_context(snapshot)
-        self.assertIn("<live_financial_context>", prompt)
-        self.assertIn("<system_role>", prompt)
-        self.assertIn("MoneyBuddy", prompt)
+        self.assertIn("<context>", prompt)
+        self.assertIn("<role>", prompt)
+        self.assertIn("MoneyChingu", prompt)
 
 if __name__ == "__main__":
     unittest.main()

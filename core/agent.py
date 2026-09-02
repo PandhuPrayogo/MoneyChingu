@@ -79,6 +79,10 @@ class FinancialAgent:
                 if skill_name in self.skills_map:
                     skill = self.skills_map[skill_name]
                     tool_result = skill.execute(**params)
+                    
+                    # If message was empty or just tool tags, provide smart summary
+                    if not message_content or message_content.strip().startswith("<tool_call>"):
+                        message_content = self._format_tool_response(skill_name, tool_result, display_currency)
             except Exception as e:
                 tool_result = {"status": "error", "error": f"Tool execution failed: {str(e)}"}
 
@@ -91,6 +95,38 @@ class FinancialAgent:
             "tool_result": tool_result,
             "hitl_pending": hitl_pending
         }
+
+    def _format_tool_response(self, skill_name: str, result: Dict[str, Any], currency: str) -> str:
+        """Format raw skill output into a readable response."""
+        sym = "$" if currency == "USD" else "Rp "
+        if result.get("status") == "error":
+            return f"⚠️ {result.get('message', 'Operation encountered an issue.')}"
+            
+        if "accounts" in result:
+            accs = result["accounts"]
+            if not accs:
+                return "You don't have any accounts set up yet."
+            lines = [f"| **{a['name']}** | `{a['account_type']}` | **{a['currency']} {a['balance']:,.2f}** |" for a in accs]
+            return "### 💳 Your Account Balances\n| Account | Type | Balance |\n| :--- | :--- | :--- |\n" + "\n".join(lines)
+            
+        if "transactions" in result:
+            txs = result["transactions"]
+            if not txs:
+                return "No transactions found in this ledger."
+            lines = [f"| {t['date']} | **{t['type'].upper()}** | {t['currency']} {t['amount']:,.2f} | {t['category']} | {t.get('merchant', '-')} |" for t in txs[:10]]
+            return "### 📒 Recent Transactions\n| Date | Type | Amount | Category | Merchant |\n| :--- | :--- | :--- | :--- | :--- |\n" + "\n".join(lines)
+            
+        if "budgets" in result:
+            bgs = result["budgets"]
+            if not bgs:
+                return "No budgets configured for this month."
+            lines = [f"| **{b['category']}** | {b['currency']} {b['monthly_limit']:,.2f} |" for b in bgs]
+            return "### 🎯 Monthly Budgets\n| Category | Monthly Limit |\n| :--- | :--- |\n" + "\n".join(lines)
+
+        if "message" in result:
+            return f"✅ {result['message']}"
+
+        return "✅ Done! Operation completed successfully."
 
     def _extract_xml_tag(self, text: str, tag_name: str) -> Optional[str]:
         """Extract content enclosed within <tag_name>...</tag_name>."""

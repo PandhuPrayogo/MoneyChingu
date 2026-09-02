@@ -18,7 +18,11 @@ class DataManagementSkill(BaseSkill):
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["add_transaction", "delete_transaction", "list_transactions", "get_accounts", "add_account", "set_budget", "get_budgets", "clear_database", "export_csv"],
+                "enum": [
+                    "add_transaction", "delete_transaction", "edit_transaction", "list_transactions", "search_transactions",
+                    "get_accounts", "add_account", "delete_account", "transfer_funds",
+                    "set_budget", "get_budgets", "clear_database", "export_csv"
+                ],
                 "description": "The data management action to execute"
             },
             "date": {"type": "string", "description": "Date in YYYY-MM-DD"},
@@ -27,12 +31,15 @@ class DataManagementSkill(BaseSkill):
             "category": {"type": "string", "description": "Expense or Income category"},
             "type": {"type": "string", "enum": ["expense", "income", "transfer"], "description": "Transaction type"},
             "account_id": {"type": "string", "description": "Target account ID"},
+            "from_account_id": {"type": "string", "description": "Source account ID for fund transfers"},
+            "to_account_id": {"type": "string", "description": "Destination account ID for fund transfers"},
             "account_name": {"type": "string", "description": "Account name (e.g. Cash, PayPal)"},
             "account_type": {"type": "string", "enum": ["cash", "bank", "e_wallet", "credit_card"], "description": "Type of account"},
             "monthly_limit": {"type": "number", "description": "Budget monthly limit"},
             "merchant": {"type": "string", "description": "Payee or merchant name"},
-            "description": {"type": "string", "description": "Additional notes"},
-            "tx_id": {"type": "string", "description": "Transaction ID for deletion"}
+            "description": {"type": "string", "description": "Additional notes or search query"},
+            "tx_id": {"type": "string", "description": "Transaction ID for deletion or editing"},
+            "query": {"type": "string", "description": "Search keyword for merchant/description"}
         },
         "required": ["action"]
     }
@@ -44,8 +51,23 @@ class DataManagementSkill(BaseSkill):
             return self._add_transaction(kwargs)
         elif action == "delete_transaction":
             return self._delete_transaction(kwargs)
+        elif action == "edit_transaction":
+            tx_id = kwargs.get("tx_id")
+            if not tx_id:
+                return {"status": "error", "message": "tx_id is required to edit a transaction."}
+            res = db.edit_transaction(tx_id, **kwargs)
+            if res:
+                return {"status": "success", "message": f"Updated transaction {tx_id}.", "transaction": res}
+            return {"status": "error", "message": f"Transaction {tx_id} not found."}
         elif action == "list_transactions":
             return self._list_transactions(kwargs)
+        elif action == "search_transactions":
+            q = kwargs.get("query") or kwargs.get("description") or kwargs.get("merchant")
+            cat = kwargs.get("category")
+            min_a = kwargs.get("min_amount")
+            max_a = kwargs.get("max_amount")
+            results = db.search_transactions(query_text=q, category=cat, min_amount=min_a, max_amount=max_a)
+            return {"status": "success", "count": len(results), "transactions": results}
         elif action == "get_accounts":
             return {"status": "success", "accounts": db.get_accounts()}
         elif action == "add_account":
@@ -55,6 +77,21 @@ class DataManagementSkill(BaseSkill):
             bal = float(kwargs.get("amount") or kwargs.get("balance") or 0.0)
             acc_id = db.add_account(name=name, account_type=acc_type, currency=curr, initial_balance=bal)
             return {"status": "success", "account_id": acc_id, "message": f"Created account '{name}' ({acc_type}, {curr}) with balance {bal:,.2f}."}
+        elif action == "delete_account":
+            acc_id = kwargs.get("account_id")
+            if not acc_id:
+                return {"status": "error", "message": "account_id required."}
+            ok = db.delete_account(acc_id)
+            return {"status": "success", "message": f"Account {acc_id} deleted."} if ok else {"status": "error", "message": "Account not found."}
+        elif action == "transfer_funds":
+            from_id = kwargs.get("from_account_id")
+            to_id = kwargs.get("to_account_id")
+            amt = float(kwargs.get("amount", 0.0))
+            curr = kwargs.get("currency", "USD")
+            desc = kwargs.get("description", "Transfer")
+            if not from_id or not to_id or amt <= 0:
+                return {"status": "error", "message": "from_account_id, to_account_id, and positive amount required."}
+            return db.transfer_funds(from_id, to_id, amt, curr, desc)
         elif action == "set_budget":
             cat = kwargs.get("category") or "Food & Dining"
             limit = float(kwargs.get("monthly_limit") or kwargs.get("amount") or 100.0)

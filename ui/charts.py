@@ -49,7 +49,7 @@ def create_cash_flow_bar_chart(income: float, expense: float, net_savings: float
     """Render comparative Bar Chart for Cash Flow."""
     categories = ["Income", "Expenses", "Net Savings"]
     amounts = [income, expense, net_savings]
-    colors = ["#10b981", "#ef4444", "#6366f1" if net_savings >= 0 else "#f59e0b"]
+    colors = ["#10b981", "#ffffff", "#6366f1" if net_savings >= 0 else "#f59e0b"]
 
     fig = go.Figure(data=[
         go.Bar(
@@ -110,7 +110,7 @@ def create_budget_progress_chart(budgets_data: List[Dict[str, Any]], currency: s
         x=spent,
         name="Actual Spent",
         orientation="h",
-        marker=dict(color=["#ef4444" if s > l else "#10b981" for s, l in zip(spent, limits)]),
+        marker=dict(color=["#ffffff" if s > l else "#10b981" for s, l in zip(spent, limits)]),
         hovertemplate="Spent: %{x:,.2f} " + currency + "<extra></extra>"
     ))
 

@@ -108,9 +108,29 @@ class TestMoneyTracker(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], doc_id)
 
+    def test_edit_transaction_and_transfer(self):
+        acc1 = self.db.add_account("Acc 1", "bank", "USD", 500.0)
+        acc2 = self.db.add_account("Acc 2", "cash", "USD", 100.0)
+        
+        # Test fund transfer
+        res = self.db.transfer_funds(acc1, acc2, 50.0, "USD")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(self.db.get_account_by_id(acc1)["balance"], 450.0)
+        self.assertEqual(self.db.get_account_by_id(acc2)["balance"], 150.0)
+
+        # Test transaction edit
+        tx_id = self.db.add_transaction("2026-09-01", 30.0, "Food & Dining", "USD", "expense", account_id=acc1)
+        self.assertEqual(self.db.get_account_by_id(acc1)["balance"], 420.0)
+        
+        # Change amount to $50
+        edited = self.db.edit_transaction(tx_id, amount=50.0)
+        self.assertIsNotNone(edited)
+        self.assertEqual(self.db.get_account_by_id(acc1)["balance"], 400.0)
+
     def test_huggingface_categorization(self):
-        res = hf_skill.execute(task="categorize_text", text="Purchased hot cappuccino at Starbucks cafe")
-        self.assertEqual(res["suggested_category"], "Food & Dining")
+        res = hf_skill.execute(action="classify_expense", text="Starbucks caramel macchiato coffee")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["predicted_category"], "Food & Dining")
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,7 +18,7 @@ class FinancialAnalyticsSkill(BaseSkill):
         "properties": {
             "analysis_type": {
                 "type": "string",
-                "enum": ["monthly_summary", "budget_status", "net_worth", "convert_currency", "spending_insights"],
+                "enum": ["monthly_summary", "budget_status", "net_worth", "convert_currency", "spending_insights", "generate_full_report"],
                 "description": "The financial analysis operation to run"
             },
             "month_year": {"type": "string", "description": "Target month in YYYY-MM format"},
@@ -45,8 +45,30 @@ class FinancialAnalyticsSkill(BaseSkill):
             return self._convert_currency(kwargs)
         elif analysis_type == "spending_insights":
             return self._get_spending_insights(month_year, currency)
+        elif analysis_type == "generate_full_report":
+            return self._generate_full_report(month_year, currency)
         else:
             return {"status": "error", "message": f"Unknown analysis type: {analysis_type}"}
+
+    def _generate_full_report(self, month_year: str, currency: str) -> Dict[str, Any]:
+        summary = db.get_monthly_summary(month_year, display_currency=currency)
+        nw = db.get_total_balance_summary(display_currency=currency)
+        budgets = self._get_budget_status(month_year, currency)
+        insights = self._get_spending_insights(month_year, currency)
+        
+        return {
+            "status": "success",
+            "month_year": month_year,
+            "currency": currency,
+            "total_net_worth": nw.get("total_net_worth", 0.0),
+            "monthly_income": summary.get("total_income", 0.0),
+            "monthly_expense": summary.get("total_expense", 0.0),
+            "net_savings": summary.get("net_savings", 0.0),
+            "savings_rate_pct": summary.get("savings_rate_pct", 0.0),
+            "category_breakdown": summary.get("category_breakdown", {}),
+            "budget_reports": budgets.get("budgets", []),
+            "insights": insights.get("insights", [])
+        }
 
     def _get_monthly_summary(self, month_year: str, currency: str) -> Dict[str, Any]:
         summary = db.get_monthly_summary(month_year, display_currency=currency)

@@ -23,12 +23,12 @@ class HuggingFaceSkill(BaseSkill):
     }
 
     def execute(self, **kwargs) -> Dict[str, Any]:
-        task = kwargs.get("task")
+        task = kwargs.get("task") or kwargs.get("action")
         text = kwargs.get("text", "")
 
-        if task == "categorize_text":
+        if task in ["categorize_text", "classify_expense"]:
             return self._categorize_text(text)
-        elif task == "financial_sentiment":
+        elif task in ["financial_sentiment", "sentiment"]:
             return self._financial_sentiment(text)
         else:
             return {"status": "error", "message": f"Unknown HuggingFace task: {task}"}
@@ -55,7 +55,8 @@ class HuggingFaceSkill(BaseSkill):
         return {
             "status": "success",
             "text": text,
-            "suggested_category": matched_cat
+            "suggested_category": matched_cat,
+            "predicted_category": matched_cat
         }
 
     def _financial_sentiment(self, text: str) -> Dict[str, Any]:

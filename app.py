@@ -20,50 +20,19 @@ from core.agent import financial_agent
 from core.gemini_client import gemini_client
 from skills import data_processing_skill, data_management_skill, financial_analytics_skill, rag_context_skill
 from ui.styles import CUSTOM_CSS
-from ui.components import render_kpi_cards, render_hitl_card, render_scratchpad_expander
+from ui.components import render_kpi_cards, render_hitl_card
 
 # ================= 1. PAGE SETUP (NO SIDEBAR) ================= #
 
 st.set_page_config(
-    page_title=f"{AGENT_NAME} - Financial Agent",
+    page_title=f"{AGENT_NAME} AI - Financial Assistant",
     page_icon="💰",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# Apply sleek styling (hide sidebar toggle and focus on chat)
-st.markdown(CUSTOM_CSS + """
-<style>
-    /* Hide sidebar completely */
-    [data-testid="collapsedControl"] { display: none; }
-    section[data-testid="stSidebar"] { display: none; }
-    
-    .chat-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding-bottom: 12px;
-        margin-bottom: 15px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    .header-pill {
-        background: rgba(99, 102, 241, 0.15);
-        border: 1px solid rgba(99, 102, 241, 0.3);
-        color: #818cf8;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 600;
-    }
-    .attachment-bar {
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px dashed rgba(255, 255, 255, 0.15);
-        border-radius: 12px;
-        padding: 10px 15px;
-        margin: 10px 0;
-    }
-</style>
-""", unsafe_allow_html=True)
+# Apply sleek styling (hide sidebar toggle, white focus on search bar, polished glassmorphism)
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 # Ensure baseline accounts exist (at zero balance)
 seed_initial_data()
@@ -73,8 +42,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "assistant",
-            "content": f"Yo! I'm **{AGENT_NAME}**, your all-in-one AI Money Tracking Buddy. 💸\n\nI can **log expenses**, **read receipts & statements (images, PDFs, CSVs)**, **manage budgets**, **check balances**, and **generate instant financial reports**.\n\n*Try asking:*\n- *\"Spent $25 on groceries at Walmart\"*\n- *\"Show my financial summary and net worth\"*\n- *\"List all my transactions\"*\n- *\"Set Food budget to $300\"*\n- *Or attach a receipt image below!*",
-            "scratchpad": "MoneyBuddy initialized in pure chat mode. Ready to process financial queries."
+            "content": f"👋 Hi! I'm **{AGENT_NAME}**, your AI Financial Tracking Assistant. 💸\n\nI can help you **track spending**, **read receipts & statements (images, PDFs, CSVs)**, **manage budgets**, **check balances**, and **generate instant financial reports**.\n\n*How can I help you manage your money today?*"
         }
     ]
 
@@ -92,7 +60,6 @@ net_worth_summary = db.get_total_balance_summary(display_currency=st.session_sta
 
 curr_sym = "$" if st.session_state.display_currency == "USD" else "Rp "
 total_nw = net_worth_summary.get("total_net_worth", 0.0)
-month_exp = monthly_summary.get("total_expense", 0.0)
 
 col_title, col_stat = st.columns([2, 1])
 with col_title:
@@ -107,10 +74,10 @@ with col_stat:
     """, unsafe_allow_html=True)
 
 # Minimal Settings Expander (Zero-clutter API Key & Currency setup)
-with st.expander("⚙️ Settings & Currency (Click to configure)", expanded=False):
+with st.expander("⚙️ Settings & Currency", expanded=False):
     s1, s2, s3 = st.columns([2, 1, 1])
     with s1:
-        api_key_input = st.text_input("Gemini API Key (Free Tier)", value=gemini_client.api_key or "", type="password", help="Free key from aistudio.google.com")
+        api_key_input = st.text_input("Gemini API Key", value=gemini_client.api_key or "", type="password", help="Free key from aistudio.google.com")
         if api_key_input:
             gemini_client.set_api_key(api_key_input)
     with s2:
@@ -140,8 +107,22 @@ if st.session_state.pending_hitl:
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👤"):
         st.markdown(msg["content"])
-        if msg.get("scratchpad"):
-            render_scratchpad_expander(msg["scratchpad"])
+
+# Quick action shortcut buttons
+qc1, qc2, qc3, qc4 = st.columns(4)
+quick_prompt = None
+with qc1:
+    if st.button("📊 Monthly Report", use_container_width=True):
+        quick_prompt = "Generate my full monthly financial summary and net worth breakdown."
+with qc2:
+    if st.button("💳 Check Balances", use_container_width=True):
+        quick_prompt = "List all my account balances."
+with qc3:
+    if st.button("🎯 Budget Status", use_container_width=True):
+        quick_prompt = "Show my budget status for this month."
+with qc4:
+    if st.button("📒 Recent Transactions", use_container_width=True):
+        quick_prompt = "List my recent transactions."
 
 # ================= 5. MULTIMODAL ATTACHMENT ACCORDION ================= #
 
@@ -158,7 +139,7 @@ with st.expander("📎 Attach Receipt Image, PDF Statement, or CSV File", expand
                 st.image(uploaded_file, caption="Receipt Attached", width=180)
         with uc2:
             if st.button("⚡ Extract & Review in Chat", type="primary", key="btn_extract_doc"):
-                with st.spinner("MoneyBuddy analyzing document..."):
+                with st.spinner("Extracting document..."):
                     if uploaded_file.type.startswith("image/"):
                         res = data_processing_skill.process_receipt_image(uploaded_file)
                         if res.get("status") == "success":
@@ -188,9 +169,11 @@ with st.expander("📎 Attach Receipt Image, PDF Statement, or CSV File", expand
                                 st.toast("CSV statement parsed! Review transaction above.", icon="📊")
                                 st.rerun()
 
-# ================= 6. CHAT INPUT ================= #
+# ================= 6. CHAT INPUT & PROMPT HANDLING ================= #
 
-if user_prompt := st.chat_input("Ask MoneyBuddy, log spending, or request a quick financial report..."):
+user_prompt = st.chat_input("Ask MoneyChingu, log spending, or request a financial report...") or quick_prompt
+
+if user_prompt:
     # Append User Message
     st.session_state.messages.append({"role": "user", "content": user_prompt})
     with st.chat_message("user", avatar="👤"):
@@ -198,7 +181,7 @@ if user_prompt := st.chat_input("Ask MoneyBuddy, log spending, or request a quic
 
     # Generate Assistant Response
     with st.chat_message("assistant", avatar="🤖"):
-        with st.spinner("MoneyBuddy thinking..."):
+        with st.spinner("MoneyChingu thinking..."):
             agent_res = financial_agent.process_user_turn(
                 user_message=user_prompt,
                 conversation_history=st.session_state.messages,
@@ -206,17 +189,14 @@ if user_prompt := st.chat_input("Ask MoneyBuddy, log spending, or request a quic
             )
 
             st.markdown(agent_res["message"])
-            if agent_res["scratchpad"]:
-                render_scratchpad_expander(agent_res["scratchpad"])
 
             # Check if HITL confirmation needed
-            if agent_res["hitl_pending"]:
+            if agent_res.get("hitl_pending"):
                 st.session_state.pending_hitl = agent_res["hitl_pending"]
                 st.rerun()
 
             # Save assistant turn
             st.session_state.messages.append({
                 "role": "assistant",
-                "content": agent_res["message"],
-                "scratchpad": agent_res["scratchpad"]
+                "content": agent_res["message"]
             })

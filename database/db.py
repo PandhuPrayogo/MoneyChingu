@@ -224,6 +224,125 @@ class DatabaseManager:
             cursor.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
             return True
 
+    def delete_account(self, account_id: str) -> bool:
+        """Delete an account and optionally cascade delete or nullify transactions."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM accounts WHERE id = ?", (account_id,))
+            if not cursor.fetchone():
+                return False
+            cursor.execute("UPDATE transactions SET account_id = NULL WHERE account_id = ?", (account_id,))
+            cursor.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+            return True
+
+    def transfer_funds(self, from_account_id: str, to_account_id: str, amount: float, currency: str = "USD", description: str = "Fund Transfer") -> Dict[str, Any]:
+        """Transfer money between two accounts with balance reconciliation."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            # Deduct from source
+            cursor.execute("UPDATE accounts SET balance = balance - ? WHERE id = ?", (amount, from_account_id))
+            # Add to destination
+            cursor.execute("UPDATE accounts SET balance = balance + ? WHERE id = ?", (amount, to_account_id))
+            
+            # Record outgoing transfer transaction
+            tx1 = f"tx_{uuid.uuid4().hex[:8]}"
+            cursor.execute("""
+                INSERT INTO transactions (id, date, amount, currency, type, category, account_id, description, status)
+                VALUES (?, ?, ?, ?, 'transfer', 'Transfer Out', ?, ?, 'confirmed')
+            """, (tx1, today, amount, currency, from_account_id, f"Transfer to {to_account_id}: {description}"))
+            
+            # Record incoming transfer transaction
+            tx2 = f"tx_{uuid.uuid4().hex[:8]}"
+            cursor.execute("""
+                INSERT INTO transactions (id, date, amount, currency, type, category, account_id, description, status)
+                VALUES (?, ?, ?, ?, 'transfer', 'Transfer In', ?, ?, 'confirmed')
+            """, (tx2, today, amount, currency, to_account_id, f"Transfer from {from_account_id}: {description}"))
+            
+            return {"status": "success", "from_tx": tx1, "to_tx": tx2, "message": f"Transferred {amount:,.2f} {currency} successfully."}
+
+    def edit_transaction(self, tx_id: str, **updates) -> Optional[Dict[str, Any]]:
+        """Edit fields of an existing transaction and update account balances if amount/type/account changed."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,))
+            old_tx = cursor.fetchone()
+            if not old_tx:
+                return None
+            old = dict(old_tx)
+            
+            # Revert old balance
+            if old["status"] == "confirmed" and old["account_id"]:
+                old_mult = -1.0 if old["type"] == "income" else 1.0
+                cursor.execute("UPDATE accounts SET balance = balance + ? WHERE id = ?", (old["amount"] * old_mult, old["account_id"]))
+                
+            new_amount = float(updates.get("amount", old["amount"]))
+            new_type = updates.get("type", old["type"])
+            new_category = updates.get("category", old["category"])
+            new_merchant = updates.get("merchant", old["merchant"])
+            new_desc = updates.get("description", old["description"])
+            new_date = updates.get("date", old["date"])
+            new_acc_id = updates.get("account_id", old["account_id"])
+            new_curr = updates.get("currency", old["currency"]).upper()
+            
+            cursor.execute("""
+                UPDATE transactions 
+                SET amount = ?, type = ?, category = ?, merchant = ?, description = ?, date = ?, account_id = ?, currency = ?
+                WHERE id = ?
+            """, (new_amount, new_type, new_category, new_merchant, new_desc, new_date, new_acc_id, new_curr, tx_id))
+            
+            # Apply new balance
+            if new_acc_id:
+                new_mult = 1.0 if new_type == "income" else -1.0
+                cursor.execute("UPDATE accounts SET balance = balance + ? WHERE id = ?", (new_amount * new_mult, new_acc_id))
+                
+            return {
+                "id": tx_id,
+                "amount": new_amount,
+                "type": new_type,
+                "category": new_category,
+                "merchant": new_merchant,
+                "description": new_desc,
+                "date": new_date,
+                "currency": new_curr
+            }
+
+    def search_transactions(self, query_text: Optional[str] = None, category: Optional[str] = None, 
+                            min_amount: Optional[float] = None, max_amount: Optional[float] = None,
+                            start_date: Optional[str] = None, end_date: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """Filter and search transactions with multi-field queries."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            sql = "SELECT t.*, a.name as account_name FROM transactions t LEFT JOIN accounts a ON t.account_id = a.id WHERE 1=1"
+            params: List[Any] = []
+            
+            if query_text:
+                sql += " AND (t.merchant LIKE ? OR t.description LIKE ? OR t.category LIKE ?)"
+                kw = f"%{query_text}%"
+                params.extend([kw, kw, kw])
+            if category:
+                sql += " AND t.category = ?"
+                params.append(category)
+            if min_amount is not None:
+                sql += " AND t.amount >= ?"
+                params.append(min_amount)
+            if max_amount is not None:
+                sql += " AND t.amount <= ?"
+                params.append(max_amount)
+            if start_date:
+                sql += " AND t.date >= ?"
+                params.append(start_date)
+            if end_date:
+                sql += " AND t.date <= ?"
+                params.append(end_date)
+                
+            sql += " ORDER BY t.date DESC LIMIT ?"
+            params.append(limit)
+            
+            cursor.execute(sql, tuple(params))
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
     # ================= BUDGETS MANAGEMENT ================= #
 
     def set_budget(self, category: str, monthly_limit: float, currency: str = "USD", month_year: Optional[str] = None) -> str:
