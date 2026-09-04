@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moneychingu"
+version = "1.0.0"
+description = "Conversational AI Financial Tracking & Money Companion using Gemini Flash, SQLite, and Silent RAG."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "PandhuPrayogo"}
+]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "1.0.0"
+tag_format = "v$version"
+version_files = [
+    "pyproject.toml:version"
+]
+bump_message = "bump: version $current_version → $new_version [skip ci]"
+update_changelog_on_bump = true
+changelog_file = "CHANGELOG.md"

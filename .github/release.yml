@@ -1,0 +1,18 @@
+changelog:
+  categories:
+    - title: "🚀 Features & Skills"
+      labels:
+        - "feature"
+        - "enhancement"
+    - title: "🐛 Bug Fixes & Refinements"
+      labels:
+        - "fix"
+        - "bug"
+    - title: "📝 Documentation & Prompts"
+      labels:
+        - "documentation"
+        - "docs"
+    - title: "🧰 Maintenance & Dependencies"
+      labels:
+        - "dependencies"
+        - "chore"

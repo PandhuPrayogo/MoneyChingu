@@ -49,6 +49,9 @@ if "messages" not in st.session_state:
 if "pending_hitl" not in st.session_state:
     st.session_state.pending_hitl = None
 
+if "prompt_queue" not in st.session_state:
+    st.session_state.prompt_queue = []
+
 if "display_currency" not in st.session_state:
     st.session_state.display_currency = DEFAULT_CURRENCY
 
@@ -169,34 +172,49 @@ with st.expander("📎 Attach Receipt Image, PDF Statement, or CSV File", expand
                                 st.toast("CSV statement parsed! Review transaction above.", icon="📊")
                                 st.rerun()
 
-# ================= 6. CHAT INPUT & PROMPT HANDLING ================= #
+# ================= 6. CHAT INPUT & PROMPT QUEUE HANDLING ================= #
 
 user_prompt = st.chat_input("Ask MoneyChingu, log spending, or request a financial report...") or quick_prompt
 
+# If a new prompt is submitted, push into the prompt queue
 if user_prompt:
+    st.session_state.prompt_queue.append(user_prompt)
+
+# Display queue status banner if multiple prompts are waiting
+if len(st.session_state.prompt_queue) > 1:
+    st.caption(f"⏳ **Prompt Queue Active**: {len(st.session_state.prompt_queue)} message(s) queued for processing.")
+
+# Process the next queued prompt FIFO
+if st.session_state.prompt_queue:
+    current_prompt = st.session_state.prompt_queue.pop(0)
+
     # Append User Message
-    st.session_state.messages.append({"role": "user", "content": user_prompt})
+    st.session_state.messages.append({"role": "user", "content": current_prompt})
     with st.chat_message("user", avatar="👤"):
-        st.markdown(user_prompt)
+        st.markdown(current_prompt)
 
     # Generate Assistant Response
     with st.chat_message("assistant", avatar="🤖"):
         with st.spinner("MoneyChingu thinking..."):
             agent_res = financial_agent.process_user_turn(
-                user_message=user_prompt,
+                user_message=current_prompt,
                 conversation_history=st.session_state.messages,
                 display_currency=st.session_state.display_currency
             )
 
             st.markdown(agent_res["message"])
 
-            # Check if HITL confirmation needed
-            if agent_res.get("hitl_pending"):
-                st.session_state.pending_hitl = agent_res["hitl_pending"]
-                st.rerun()
-
             # Save assistant turn
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": agent_res["message"]
             })
+
+            # Check if HITL confirmation needed
+            if agent_res.get("hitl_pending"):
+                st.session_state.pending_hitl = agent_res["hitl_pending"]
+                st.rerun()
+
+    # If there are remaining queued prompts, trigger rerun to process sequentially
+    if st.session_state.prompt_queue:
+        st.rerun()
