@@ -22,40 +22,6 @@
 
 ---
 
-## 🏗️ System Architecture
-
-```mermaid
-flowchart TD
-    User([User]) <--> ChatUI[Streamlit Single-Pane Chat & Inline Toolbar]
-    ChatUI <--> AgentCore[AI Financial Agent Core]
-    
-    subgraph AgentCore [Context Engineering ReAct Loop]
-        IntentRouter[🎯 Intent Router & Dynamic Tool RAG]
-        ContextMgr[🗜️ Context Manager: Pruning & Compression]
-        LayeredPrompt[📐 Layered System Prompt & Authority Hierarchy]
-        MemoryStore[💾 Memory Store: Episodic, Semantic, Procedural]
-        GeminiClient[🤖 Google Gemini 3.6 / 2.0 Flash]
-    end
-
-    AgentCore <--> SkillsLayer [Modular Agent Skills]
-
-    subgraph SkillsLayer [Modular Agent Skills]
-        SkillOCR[📸 Data Processing: Receipt OCR / PDF / CSV]
-        SkillCRUD[💾 Data Management: SQLite CRUD & Reports]
-        SkillStats[📈 Financial Analytics & Budgets]
-        SkillHF[🤗 HuggingFace Integration]
-    end
-
-    AgentCore --> PermissionGate{🛡️ Action Permission Gate}
-    PermissionGate -- Safe / User Confirmed --> SkillsLayer
-    PermissionGate -- Destructive / Needs Review --> HITLCard[🛡️ Inline HITL Confirmation Card]
-    HITLCard -- Confirmed --> SkillsLayer
-    SkillsLayer <--> SQLiteDB[(SQLite: money_tracker.db)]
-    SkillsLayer <--> VectorDB[(Vector Memory: vectors.json)]
-```
-
----
-
 ## 📁 Project Structure
 
 ```
