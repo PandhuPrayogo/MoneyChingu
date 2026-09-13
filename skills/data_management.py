@@ -21,10 +21,13 @@ class DataManagementSkill(BaseSkill):
                 "enum": [
                     "add_transaction", "delete_transaction", "edit_transaction", "list_transactions", "search_transactions",
                     "get_accounts", "add_account", "delete_account", "transfer_funds",
-                    "set_budget", "get_budgets", "clear_database", "export_csv"
+                    "set_budget", "get_budgets", "clear_database", "export_csv",
+                    "set_preference", "get_preferences"
                 ],
                 "description": "The data management action to execute"
             },
+            "key": {"type": "string", "description": "Preference key (e.g. user_name, ai_name)"},
+            "value": {"type": "string", "description": "Preference value"},
             "date": {"type": "string", "description": "Date in YYYY-MM-DD"},
             "amount": {"type": "number", "description": "Transaction amount"},
             "currency": {"type": "string", "enum": ["USD", "IDR"], "description": "Transaction currency"},
@@ -105,9 +108,18 @@ class DataManagementSkill(BaseSkill):
         elif action == "clear_database":
             db.clear_all_data(create_default_empty_accounts=True)
             vector_store.clear_all()
-            return {"status": "success", "message": "Database and semantic memory have been reset to clean zero state."}
+            return {"status": "success", "message": "Database, chat history, and semantic memory have been reset to clean zero state."}
         elif action == "export_csv":
             return self._export_csv()
+        elif action == "set_preference":
+            k = kwargs.get("key")
+            v = kwargs.get("value")
+            if not k or not v:
+                return {"status": "error", "message": "key and value are required to set preference."}
+            db.set_preference(k, str(v))
+            return {"status": "success", "message": f"Saved preference '{k}': '{v}'.", "preferences": db.get_all_preferences()}
+        elif action == "get_preferences":
+            return {"status": "success", "preferences": db.get_all_preferences()}
         else:
             return {"status": "error", "message": f"Unknown action: {action}"}
 

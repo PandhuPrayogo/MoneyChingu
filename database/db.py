@@ -1,5 +1,6 @@
 import sqlite3
 import uuid
+import json
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from pathlib import Path
@@ -102,6 +103,39 @@ class DatabaseManager:
                     embedding_json TEXT,
                     metadata_json TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
+            # User Preferences / Profile Table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_preferences (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
+            # Persistent Chat History Table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS chat_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL DEFAULT 'default',
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
+            # Agent Memory Table (Context Engineering: Episodic, Semantic, Procedural)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS agent_memory (
+                    id TEXT PRIMARY KEY,
+                    memory_type TEXT NOT NULL, -- 'episodic', 'semantic', 'procedural'
+                    content TEXT NOT NULL,
+                    metadata_json TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    access_count INTEGER DEFAULT 0
                 );
             """)
 
@@ -433,6 +467,9 @@ class DatabaseManager:
             cursor.execute("DELETE FROM budgets;")
             cursor.execute("DELETE FROM audit_logs;")
             cursor.execute("DELETE FROM semantic_documents;")
+            cursor.execute("DELETE FROM chat_history;")
+            cursor.execute("DELETE FROM user_preferences;")
+            cursor.execute("DELETE FROM agent_memory;")
             cursor.execute("DELETE FROM accounts;")
             
             if create_default_empty_accounts:
@@ -478,6 +515,169 @@ class DatabaseManager:
             "total_net_worth": total_net_worth,
             "accounts": breakdown
         }
+
+    # ================= USER PREFERENCES & IDENTITY ================= #
+
+    def set_preference(self, key: str, value: str) -> None:
+        """Store or update a user preference key-value pair."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO user_preferences (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = CURRENT_TIMESTAMP;
+            """, (key, value))
+
+    def get_preference(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        """Retrieve a specific user preference value."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM user_preferences WHERE key = ?;", (key,))
+            row = cursor.fetchone()
+            return row["value"] if row else default
+
+    def get_all_preferences(self) -> Dict[str, str]:
+        """Return all user preferences as a key-value dictionary."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT key, value FROM user_preferences;")
+            rows = cursor.fetchall()
+            return {r["key"]: r["value"] for r in rows}
+
+    # ================= PERSISTENT CHAT HISTORY ================= #
+
+    def save_chat_message(self, role: str, content: str, session_id: str = "default") -> None:
+        """Persist a chat message to the database."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO chat_history (session_id, role, content)
+                VALUES (?, ?, ?);
+            """, (session_id, role, content))
+
+    def get_chat_history(self, session_id: str = "default", limit: int = 50) -> List[Dict[str, str]]:
+        """Retrieve recent chat history ordered chronologically."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT role, content FROM chat_history
+                WHERE session_id = ?
+                ORDER BY id ASC
+                LIMIT ?;
+            """, (session_id, limit))
+            rows = cursor.fetchall()
+            return [{"role": r["role"], "content": r["content"]} for r in rows]
+
+    def clear_chat_history(self, session_id: str = "default") -> None:
+        """Clear chat messages for a specific session."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM chat_history WHERE session_id = ?;", (session_id,))
+
+    # ================= AGENT MEMORY (CONTEXT ENGINEERING) ================= #
+
+    def store_memory(self, memory_type: str, content: str, metadata: Optional[Dict[str, Any]] = None, mem_id: Optional[str] = None) -> str:
+        """Persist typed memory (episodic, semantic, or procedural) into SQLite."""
+        memory_id = mem_id or f"mem_{uuid.uuid4().hex[:8]}"
+        meta_json = json.dumps(metadata or {})
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO agent_memory (id, memory_type, content, metadata_json, accessed_at, access_count)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 1)
+                ON CONFLICT(id) DO UPDATE SET
+                    content = excluded.content,
+                    metadata_json = excluded.metadata_json,
+                    accessed_at = CURRENT_TIMESTAMP,
+                    access_count = access_count + 1;
+            """, (memory_id, memory_type, content, meta_json))
+        return memory_id
+
+    def get_memories_by_type(self, memory_type: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retrieve recent memories filtered by type."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            if memory_type:
+                cursor.execute("""
+                    SELECT id, memory_type, content, metadata_json, created_at, accessed_at, access_count
+                    FROM agent_memory
+                    WHERE memory_type = ?
+                    ORDER BY accessed_at DESC
+                    LIMIT ?;
+                """, (memory_type, limit))
+            else:
+                cursor.execute("""
+                    SELECT id, memory_type, content, metadata_json, created_at, accessed_at, access_count
+                    FROM agent_memory
+                    ORDER BY accessed_at DESC
+                    LIMIT ?;
+                """, (limit,))
+            rows = cursor.fetchall()
+            return [
+                {
+                    "id": r["id"],
+                    "memory_type": r["memory_type"],
+                    "content": r["content"],
+                    "metadata": json.loads(r["metadata_json"] or "{}"),
+                    "created_at": r["created_at"],
+                    "accessed_at": r["accessed_at"],
+                    "access_count": r["access_count"]
+                }
+                for r in rows
+            ]
+
+    def search_memories(self, query: str, memory_types: Optional[List[str]] = None, limit: int = 5) -> List[Dict[str, Any]]:
+        """Keyword search over stored memories with access tracking."""
+        tokens = [t.strip().lower() for t in query.split() if len(t.strip()) > 2]
+        all_memories = self.get_memories_by_type(limit=100)
+        
+        filtered = []
+        for mem in all_memories:
+            if memory_types and mem["memory_type"] not in memory_types:
+                continue
+            content_lower = mem["content"].lower()
+            match_score = sum(1 for t in tokens if t in content_lower)
+            if match_score > 0 or not tokens:
+                mem["relevance_score"] = match_score
+                filtered.append(mem)
+
+        filtered.sort(key=lambda x: (x.get("relevance_score", 0), x.get("accessed_at", "")), reverse=True)
+        top_results = filtered[:limit]
+
+        # Touch matched memories
+        for r in top_results:
+            self.touch_memory(r["id"])
+
+        return top_results
+
+    def touch_memory(self, memory_id: str) -> None:
+        """Update last accessed timestamp and increment access count."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE agent_memory
+                SET accessed_at = CURRENT_TIMESTAMP, access_count = access_count + 1
+                WHERE id = ?;
+            """, (memory_id,))
+
+    def evict_stale_memories(self, max_age_days: int = 30) -> int:
+        """Evict memories older than max_age_days (except procedural rules)."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                DELETE FROM agent_memory
+                WHERE memory_type != 'procedural'
+                AND julianday('now') - julianday(created_at) > ?;
+            """, (max_age_days,))
+            return cursor.rowcount
+
+    def clear_memories(self) -> None:
+        """Wipe all agent memories."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM agent_memory;")
 
 # Global singleton
 db = DatabaseManager()

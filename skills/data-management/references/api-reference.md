@@ -16,3 +16,5 @@
 | `get_budgets` | None | `month` | Query category budgets |
 | `clear_database` | None | None | Reset database to zero state |
 | `export_csv` | None | None | Generate CSV file of transactions |
+| `set_preference` | `key`, `value` | None | Store user preference/name |
+| `get_preferences` | None | None | Retrieve user preferences |

@@ -13,12 +13,12 @@
 ## 🌟 Key Highlights & Features
 
 - 💬 **Single-Pane Conversational UI**: Focused, distraction-free chat interface with chat session displayed cleanly above the input box (no complex sidebars).
-- 🛠️ **All-in-One Conversational CRUD**: The agent creates/reads/updates/deletes transactions, accounts, budgets, and produces instant reports (tables, cash flow, net worth) directly in the chat stream.
-- 📸 **Inline Multimodal Ingestion**: Upload receipt images, bank PDFs, or CSV exports directly into chat for instant AI parsing.
-- 🛡️ **Human-in-the-Loop (HITL) Verification**: Preview extracted records in an editable confirmation card inline before saving to SQLite.
-- 🧠 **Silent RAG Pipeline**: Background vector retrieval with Google `text-embedding-004` automatically enriches prompt context with relevant memories on every user query.
+- 🛠️ **Inline Chat Toolbar**: Sleek popovers directly above chat input: `🛠️ Tools` (Recent Transactions, Check Balances) and `➕ Attach` (receipt images, PDF/CSV statements) with instant preview.
+- 🛡️ **Action Permission Gate (HITL)**: Destructive and irreversible actions (`clear_database`, `delete_transaction`, `delete_account`, `transfer_funds`) are intercepted and require explicit confirmation (`✅ Yes, Proceed` / `❌ Cancel`).
+- 🧠 **4-Pillar Context Engineering**: Google-standard architecture implementing WRITE (episodic/semantic memory in SQLite), SELECT (JIT tool & intent routing), COMPRESS (token pruning & rolling summaries), and ISOLATE (layered prompts with strict authority hierarchy).
+- 📸 **Multimodal Vision OCR & Summary**: Gemini Vision analyzes receipt images, provides a concise visual analysis summary banner, and lets users manually refine notes and fields before confirming.
 - 🌐 **Dual International Currency**: Native support for **USD (\$ )** and **IDR (Rp)** with automated conversion.
-- 🔒 **Privacy-First & Local Storage**: 100% local SQLite database.
+- 🔒 **Privacy-First & Local Storage**: 100% local SQLite database with cross-session chat and memory persistence.
 
 ---
 
@@ -26,17 +26,18 @@
 
 ```mermaid
 flowchart TD
-    User([User]) <--> ChatUI[Streamlit Single-Pane Chat & Inline Attachments]
+    User([User]) <--> ChatUI[Streamlit Single-Pane Chat & Inline Toolbar]
     ChatUI <--> AgentCore[AI Financial Agent Core]
     
-    subgraph AgentCore [Agent Reasoning & Memory]
-        AnthropicPrompt[Anthropic XML Prompting & CoT]
-        GoogleContext[Google Grounded Context Engine]
-        SilentRAG[🧠 Silent RAG Vector Pipeline]
-        GeminiClient[Google Gemini 3.6 Flash]
+    subgraph AgentCore [Context Engineering ReAct Loop]
+        IntentRouter[🎯 Intent Router & Dynamic Tool RAG]
+        ContextMgr[🗜️ Context Manager: Pruning & Compression]
+        LayeredPrompt[📐 Layered System Prompt & Authority Hierarchy]
+        MemoryStore[💾 Memory Store: Episodic, Semantic, Procedural]
+        GeminiClient[🤖 Google Gemini 3.6 / 2.0 Flash]
     end
 
-    AgentCore <--> ToolRouter[All-in-One CRUD & Skills Router]
+    AgentCore <--> SkillsLayer [Modular Agent Skills]
 
     subgraph SkillsLayer [Modular Agent Skills]
         SkillOCR[📸 Data Processing: Receipt OCR / PDF / CSV]
@@ -45,11 +46,12 @@ flowchart TD
         SkillHF[🤗 HuggingFace Integration]
     end
 
-    ToolRouter <--> SkillsLayer
-    SkillOCR --> HITLCard[🛡️ Inline Human-in-the-Loop Confirmation]
-    HITLCard -- Confirmed --> SkillCRUD
-    SkillCRUD <--> SQLiteDB[(SQLite Database: money_tracker.db)]
-    SilentRAG <--> VectorDB[(Vector Memory: vectors.json)]
+    AgentCore --> PermissionGate{🛡️ Action Permission Gate}
+    PermissionGate -- Safe / User Confirmed --> SkillsLayer
+    PermissionGate -- Destructive / Needs Review --> HITLCard[🛡️ Inline HITL Confirmation Card]
+    HITLCard -- Confirmed --> SkillsLayer
+    SkillsLayer <--> SQLiteDB[(SQLite: money_tracker.db)]
+    SkillsLayer <--> VectorDB[(Vector Memory: vectors.json)]
 ```
 
 ---
@@ -58,35 +60,38 @@ flowchart TD
 
 ```
 Tracking_Money/
-├── app.py                      # Streamlit Main Dashboard & Chat Controller
-├── config.py                   # App Configuration, Model Settings, & Currency Rates
-├── requirements.txt            # Python Dependencies
-├── PRD.md                      # Product Requirement Document
-├── README.md                   # Repository Documentation
-├── .env.example                # Environment Variable Template
+├── app.py                          # Streamlit Main Dashboard & Chat Controller
+├── config.py                       # App Configuration, Model Settings, & Currency Rates
+├── requirements.txt                # Python Dependencies
+├── PRD.md                          # Product Requirement Document & Progress Log
+├── README.md                       # Repository Documentation
+├── .env.example                    # Environment Variable Template
 ├── core/
-│   ├── agent.py                # Central AI ReAct Agent with Tool Routing & HITL
-│   ├── gemini_client.py        # Gemini API Client (Multimodal & Free Tier)
-│   ├── prompts.py              # Anthropic XML Prompt Templates & Context Grounding
-│   └── context_manager.py      # Google Context Engineering & Token Management
+│   ├── agent.py                    # Central AI ReAct Agent with 7-Phase Context Engineering
+│   ├── intent_router.py            # Bilingual Intent Router & JIT Dynamic Tool Injection
+│   ├── memory_store.py             # Typed Memory Persistence (Episodic, Semantic, Procedural)
+│   ├── context_manager.py          # In-Flight Token Pruning & Rolling Extractive Summarizer
+│   ├── prompts.py                  # Layered XML Prompts with Strict Authority Precedence
+│   └── gemini_client.py            # Gemini API Client (Multimodal & Free Tier Fallbacks)
 ├── database/
-│   ├── db.py                   # SQLite Database Manager (Accounts, Transactions, Budgets)
-│   ├── vector_store.py         # Vector Store with Google Embeddings for RAG
-│   └── seed_data.py            # Initial Seed Data for Instant Setup
+│   ├── db.py                       # SQLite Database Manager (Accounts, Transactions, Budgets, Memory)
+│   ├── vector_store.py             # Vector Store with Google Embeddings for RAG
+│   └── seed_data.py                # Initial Seed Data for Instant Setup
 ├── skills/
-│   ├── base.py                 # Abstract Base Skill
-│   ├── data_processing.py      # Multimodal OCR, PDF & CSV Parser
-│   ├── data_management.py      # SQLite CRUD, Balance Reconciliation, CSV Export
-│   ├── financial_analytics.py  # Budget Burn Rates, Cash Flows, Currency Math
-│   ├── rag_context.py          # Semantic Retrieval over Financial Memory
-│   └── hf_skills.py            # HuggingFace Zero-Shot Categorization & Sentiment
+│   ├── base.py                     # Abstract Base Skill
+│   ├── data_processing.py          # Multimodal OCR, PDF & CSV Parser
+│   ├── data_management.py          # SQLite CRUD, Balance Reconciliation, CSV Export
+│   ├── financial_analytics.py      # Budget Burn Rates, Cash Flows, Currency Math
+│   ├── rag_context.py              # Semantic Retrieval over Financial Memory
+│   └── hf_skills.py                # HuggingFace Zero-Shot Categorization & Sentiment
 ├── ui/
-│   ├── components.py           # HITL Confirmation Cards, KPI Metric Widgets
-│   ├── charts.py               # Plotly Interactive Visualizations
-│   └── styles.py               # Sleek Modern Dark/Glassmorphic CSS Theme
+│   ├── components.py               # Inline HITL Cards, Destructive Permission Cards, KPI Widgets
+│   ├── charts.py                   # Plotly Interactive Visualizations
+│   └── styles.py                   # Sleek Modern Dark/Glassmorphic CSS Theme
 └── tests/
-    ├── test_money_tracker.py   # Unit Tests for Database, Skills, and Vector RAG
-    └── test_agent.py           # Unit Tests for Agent Core & Prompt Grounding
+    ├── test_money_tracker.py       # Unit Tests for Database, Skills, and Vector RAG
+    ├── test_agent.py               # Unit Tests for Agent Core, Permissions, and Formatting
+    └── test_context_engineering.py # Unit Tests for 4 Context Engineering Pillars
 ```
 
 ---
@@ -153,17 +158,29 @@ python -m unittest discover -s tests -v
 * *"Beli kopi kenangan 45000 IDR pake GoPay"*
 * *"Received \$2,500 salary from employer"*
 
-### 2. Receipt Vision Scanning
-1. Expand **"📸 Drop Receipt Image, PDF Statement, or CSV File"** in Tab 1.
-2. Upload a receipt or invoice photo.
-3. Click **"🔍 Analyze & Extract with AI"**.
-4. Review the **Human-in-the-Loop (HITL)** editable confirmation card.
-5. Click **"✅ Confirm & Save"** to update your ledger.
+### 2. Receipt Vision Scanning & Attachments
+1. Click **`➕ Attach`** directly above the chat box.
+2. Upload a receipt image, PDF bank statement, or CSV export.
+3. Preview the image or file and click **`⚡ Extract & Review in Chat`**.
+4. Read the **LLM Image Analysis Summary** and review the inline confirmation card.
+5. Manually adjust any notes or fields, then click **`✅ Confirm & Save`**.
 
 ### 3. Financial Analytics & RAG
 * *"How much did I spend on Food this month in USD?"*
 * *"Show my current budget burn rate."*
 * *"Where did I buy that pasta dinner last week?"* (Searches semantic vector memory).
+
+---
+
+## 🆕 Progress Log / What's New
+
+### v1.2.0
+- **Clean Inline Toolbar**: Simplified to 2 essential shortcuts (`Recent Transactions`, `Check Balances`) and inline `➕ Attach` popover with instant preview.
+- **In-Chat HITL Placement**: Confirmation cards now render directly inside the active chat message stream instead of at the top of the UI.
+- **Action Permission Gate**: Destructive actions (`clear_database`, `delete_transaction`, `delete_account`, `transfer_funds`) are intercepted and require explicit confirmation.
+- **Visual Image Analysis Summary & Editable Notes**: Gemini Flash Vision analyzes attached receipts, generates a visual overview banner, and provides an editable notes area for manual refinement.
+- **Context Engineering Architecture**: Defeats context poisoning, distraction, confusion, and clash via 4 pillars: WRITE (typed memory), SELECT (JIT dynamic tools), COMPRESS (token pruning & summaries), and ISOLATE (layered prompts with authority hierarchy).
+- **Cross-Session Continuity**: SQLite-persisted chat history and user preferences loaded on startup.
 
 ---
 

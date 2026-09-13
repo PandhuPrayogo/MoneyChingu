@@ -37,14 +37,18 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # Ensure baseline accounts exist (at zero balance)
 seed_initial_data()
 
-# Initialize session states
+# Initialize session states from SQLite history if available
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": f"👋 Hi! I'm **{AGENT_NAME}**, your AI Financial Tracking Assistant. 💸\n\nI can help you **track spending**, **read receipts & statements (images, PDFs, CSVs)**, **manage budgets**, **check balances**, and **generate instant financial reports**.\n\n*How can I help you manage your money today?*"
-        }
-    ]
+    saved_history = db.get_chat_history(limit=50)
+    if saved_history:
+        st.session_state.messages = saved_history
+    else:
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": f"👋 Hi! I'm **{AGENT_NAME}**, your AI Financial Tracking Assistant. 💸\n\nI can help you **track spending**, **read receipts & statements (images, PDFs, CSVs)**, **manage budgets**, **check balances**, and **generate instant financial reports**.\n\n*How can I help you manage your money today?*"
+            }
+        ]
 
 if "pending_hitl" not in st.session_state:
     st.session_state.pending_hitl = None
@@ -90,64 +94,77 @@ with st.expander("⚙️ Settings & Currency", expanded=False):
             st.rerun()
     with s3:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🗑️ Reset to Zero", help="Wipes all ledger transactions and memory back to 0"):
+        if st.button("🗑️ Reset to Zero", help="Wipes all ledger transactions, chat history, and memory back to 0"):
             db.clear_all_data(create_default_empty_accounts=True)
             vector_store.clear_all()
-            st.toast("Database & vector memory reset to 0!", icon="🧹")
+            st.session_state.messages = [
+                {
+                    "role": "assistant",
+                    "content": f"👋 Hi! I'm **{AGENT_NAME}**, your AI Financial Tracking Assistant. 💸\n\nI can help you **track spending**, **read receipts & statements (images, PDFs, CSVs)**, **manage budgets**, **check balances**, and **generate instant financial reports**.\n\n*How can I help you manage your money today?*"
+                }
+            ]
+            st.session_state.pending_hitl = None
+            st.session_state.prompt_queue = []
+            st.toast("Database, chat history & vector memory reset to 0!", icon="🧹")
             st.rerun()
 
 st.divider()
 
-# ================= 3. INLINE HUMAN-IN-THE-LOOP (HITL) CARD ================= #
-
-accounts = db.get_accounts()
-
-if st.session_state.pending_hitl:
-    render_hitl_card("chat_hitl_inline", st.session_state.pending_hitl, accounts)
-
-# ================= 4. CHAT SESSION STREAM (ABOVE INPUT) ================= #
+# ================= 3. CHAT SESSION STREAM ================= #
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👤"):
         st.markdown(msg["content"])
 
-# Quick action shortcut buttons
-qc1, qc2, qc3, qc4 = st.columns(4)
+# Inline Human-in-the-Loop (HITL) card rendered directly inside the chat flow
+if st.session_state.pending_hitl:
+    accounts = db.get_accounts()
+    with st.chat_message("assistant", avatar="🛡️"):
+        render_hitl_card("chat_hitl_inline", st.session_state.pending_hitl, accounts)
+
+# ================= 4. INLINE CHAT TOOLBAR (TOOLS & ATTACH) ================= #
+
+tool_c1, tool_c2, _ = st.columns([1, 1, 4])
 quick_prompt = None
-with qc1:
-    if st.button("📊 Monthly Report", use_container_width=True):
-        quick_prompt = "Generate my full monthly financial summary and net worth breakdown."
-with qc2:
-    if st.button("💳 Check Balances", use_container_width=True):
-        quick_prompt = "List all my account balances."
-with qc3:
-    if st.button("🎯 Budget Status", use_container_width=True):
-        quick_prompt = "Show my budget status for this month."
-with qc4:
-    if st.button("📒 Recent Transactions", use_container_width=True):
-        quick_prompt = "List my recent transactions."
 
-# ================= 5. MULTIMODAL ATTACHMENT ACCORDION ================= #
+with tool_c1:
+    with st.popover("🛠️ Tools", use_container_width=True):
+        st.markdown("**Quick Actions**")
+        if st.button("📒 Recent Transactions", use_container_width=True, key="tool_recent_tx"):
+            quick_prompt = "List my recent transactions."
+        if st.button("💳 Check Balances", use_container_width=True, key="tool_check_bal"):
+            quick_prompt = "List all my account balances."
 
-with st.expander("📎 Attach Receipt Image, PDF Statement, or CSV File", expanded=False):
-    uploaded_file = st.file_uploader(
-        "Upload receipt / invoice / statement for instant AI extraction",
-        type=["png", "jpg", "jpeg", "webp", "pdf", "csv"],
-        key="inline_multimodal_uploader"
-    )
-    if uploaded_file is not None:
-        uc1, uc2 = st.columns([1, 2])
-        with uc1:
+with tool_c2:
+    with st.popover("➕ Attach", use_container_width=True):
+        st.markdown("**Attach Receipt or File**")
+        uploaded_file = st.file_uploader(
+            "Upload receipt / invoice / statement",
+            type=["png", "jpg", "jpeg", "webp", "pdf", "csv"],
+            key="inline_attach_uploader",
+            label_visibility="collapsed"
+        )
+        if uploaded_file is not None:
             if uploaded_file.type.startswith("image/"):
-                st.image(uploaded_file, caption="Receipt Attached", width=180)
-        with uc2:
-            if st.button("⚡ Extract & Review in Chat", type="primary", key="btn_extract_doc"):
+                st.image(uploaded_file, caption=f"Preview: {uploaded_file.name}", use_container_width=True)
+            else:
+                st.info(f"📄 **{uploaded_file.name}** ({uploaded_file.size / 1024:.1f} KB)")
+
+            if st.button("⚡ Extract & Review in Chat", type="primary", use_container_width=True, key="btn_extract_doc"):
                 with st.spinner("Extracting document..."):
                     if uploaded_file.type.startswith("image/"):
                         res = data_processing_skill.process_receipt_image(uploaded_file)
                         if res.get("status") == "success":
-                            st.session_state.pending_hitl = res["data"]
-                            st.toast("Receipt parsed! Review the confirmation card above.", icon="✨")
+                            data = res["data"]
+                            st.session_state.pending_hitl = data
+                            analysis_summary = data.get("analysis_summary") or f"Receipt from **{data.get('merchant', 'Merchant')}** for **{data.get('currency', 'USD')} {data.get('amount', 0.0):,.2f}** ({data.get('category', 'Expense')})."
+                            user_msg = f"📎 *Attached Receipt: {uploaded_file.name}*"
+                            asst_msg = f"🔍 **LLM Image Analysis Summary:**\n{analysis_summary}\n\n*Review the extracted draft below. You can manually adjust the note and details before confirming.*"
+                            st.session_state.messages.append({"role": "user", "content": user_msg})
+                            st.session_state.messages.append({"role": "assistant", "content": asst_msg})
+                            db.save_chat_message("user", user_msg)
+                            db.save_chat_message("assistant", asst_msg)
+                            st.toast("Receipt analyzed! Review details in the card below.", icon="🔍")
                             st.rerun()
                         else:
                             st.error(res.get("message", "Error extracting image."))
@@ -155,22 +172,36 @@ with st.expander("📎 Attach Receipt Image, PDF Statement, or CSV File", expand
                         res = data_processing_skill.process_bank_pdf(uploaded_file)
                         if res.get("status") == "success":
                             tx_list = res.get("data", [])
+                            user_msg = f"📎 *Attached PDF Statement: {uploaded_file.name}*"
                             if tx_list and isinstance(tx_list, list):
                                 st.session_state.pending_hitl = tx_list[0]
-                                st.toast("PDF statement parsed! Review transaction above.", icon="📄")
-                                st.rerun()
+                                asst_msg = f"📄 Extracted PDF statement (**{len(tx_list)} transactions** detected). Review the first transaction draft in the card below."
                             else:
-                                st.write("Extracted PDF Transactions:", pd.DataFrame(tx_list))
+                                asst_msg = "📄 Extracted PDF text, but no distinct transaction rows were recognized."
+                            st.session_state.messages.append({"role": "user", "content": user_msg})
+                            st.session_state.messages.append({"role": "assistant", "content": asst_msg})
+                            db.save_chat_message("user", user_msg)
+                            db.save_chat_message("assistant", asst_msg)
+                            st.toast("PDF statement parsed! Review transaction below.", icon="📄")
+                            st.rerun()
                         else:
                             st.error(res.get("message", "Error extracting PDF."))
                     elif uploaded_file.type in ["text/csv", "application/vnd.ms-excel"]:
                         res = data_processing_skill.process_csv_statement(uploaded_file)
                         if res.get("status") == "success":
                             tx_list = res.get("data", [])
+                            user_msg = f"📎 *Attached CSV Statement: {uploaded_file.name}*"
                             if tx_list and isinstance(tx_list, list):
                                 st.session_state.pending_hitl = tx_list[0]
-                                st.toast("CSV statement parsed! Review transaction above.", icon="📊")
-                                st.rerun()
+                                asst_msg = f"📊 Extracted CSV statement (**{len(tx_list)} rows**). Review the first transaction draft in the card below."
+                            else:
+                                asst_msg = "📊 Processed CSV, but no transaction records were recognized."
+                            st.session_state.messages.append({"role": "user", "content": user_msg})
+                            st.session_state.messages.append({"role": "assistant", "content": asst_msg})
+                            db.save_chat_message("user", user_msg)
+                            db.save_chat_message("assistant", asst_msg)
+                            st.toast("CSV statement parsed! Review transaction below.", icon="📊")
+                            st.rerun()
 
 # ================= 6. CHAT INPUT & PROMPT QUEUE HANDLING ================= #
 
@@ -190,6 +221,7 @@ if st.session_state.prompt_queue:
 
     # Append User Message
     st.session_state.messages.append({"role": "user", "content": current_prompt})
+    db.save_chat_message("user", current_prompt)
     with st.chat_message("user", avatar="👤"):
         st.markdown(current_prompt)
 
@@ -209,6 +241,7 @@ if st.session_state.prompt_queue:
                 "role": "assistant",
                 "content": agent_res["message"]
             })
+            db.save_chat_message("assistant", agent_res["message"])
 
             # Check if HITL confirmation needed
             if agent_res.get("hitl_pending"):

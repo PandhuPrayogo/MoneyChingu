@@ -132,5 +132,26 @@ class TestMoneyTracker(unittest.TestCase):
         self.assertEqual(res["status"], "success")
         self.assertEqual(res["predicted_category"], "Food & Dining")
 
+    def test_user_preferences_and_chat_history(self):
+        # 1. Preferences
+        self.db.set_preference("user_name", "Pandhu")
+        self.db.set_preference("ai_name", "ChinguBot")
+        self.assertEqual(self.db.get_preference("user_name"), "Pandhu")
+        self.assertEqual(self.db.get_preference("ai_name"), "ChinguBot")
+        prefs = self.db.get_all_preferences()
+        self.assertIn("user_name", prefs)
+        self.assertIn("ai_name", prefs)
+
+        # 2. Chat history
+        self.db.save_chat_message("user", "Hello assistant")
+        self.db.save_chat_message("assistant", "Hello Pandhu!")
+        history = self.db.get_chat_history()
+        self.assertEqual(len(history), 2)
+        self.assertEqual(history[0]["role"], "user")
+        self.assertEqual(history[1]["content"], "Hello Pandhu!")
+
+        self.db.clear_chat_history()
+        self.assertEqual(len(self.db.get_chat_history()), 0)
+
 if __name__ == "__main__":
     unittest.main()

@@ -62,34 +62,50 @@ class DataProcessingSkill(BaseSkill):
             else:
                 pil_img = image_file_or_pil
 
-            if GEMINI_API_KEY:
+            import os
+            from core.gemini_client import gemini_client
+            active_key = gemini_client.api_key or GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
+
+            if active_key:
                 import google.generativeai as genai
-                genai.configure(api_key=GEMINI_API_KEY)
+                genai.configure(api_key=active_key)
                 
-                candidate_models = [DEFAULT_GEMINI_MODEL, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]
+                candidate_models = [
+                    gemini_client.model_name,
+                    "gemini-2.0-flash",
+                    "gemini-1.5-flash",
+                    "gemini-2.5-flash",
+                    DEFAULT_GEMINI_MODEL
+                ]
                 unique_models = []
                 for m in candidate_models:
                     if m and m not in unique_models:
                         unique_models.append(m)
 
                 prompt = f"""
-                You are an expert financial receipt auditor. Analyze this receipt/invoice image carefully.
-                Extract the following structured JSON data accurately:
+                You are an expert financial receipt auditor. Analyze this receipt/invoice/bill image carefully.
                 
+                Provide:
+                1. "analysis_summary": A concise 1-2 sentence overview describing what you see on this receipt (merchant name, items, total amount, payment method or date).
+                2. Extracted structured financial data.
+
+                Return strictly a JSON object:
                 {{
+                    "analysis_summary": "1-2 sentence summary of what is seen on the receipt.",
                     "merchant": "Merchant or Store Name",
                     "date": "YYYY-MM-DD (use today's date {datetime.now().strftime('%Y-%m-%d')} if not found)",
                     "amount": 0.00,
-                    "currency": "USD or IDR (determine based on symbols like $, Rp, IDR, or US store context)",
+                    "currency": "USD or IDR (determine based on symbols like $, Rp, IDR, or store context)",
                     "category": "Pick best match from: {', '.join(DEFAULT_EXPENSE_CATEGORIES)}",
                     "type": "expense",
                     "items_summary": "Short comma-separated list of major items purchased",
-                    "confidence_score": 0.95
+                    "notes": "Detailed notes or itemization from receipt"
                 }}
 
                 Return ONLY raw, valid JSON with no markdown backticks or commentary.
                 """
 
+                last_err = None
                 for current_model_name in unique_models:
                     try:
                         model = genai.GenerativeModel(current_model_name)
@@ -102,28 +118,52 @@ class DataProcessingSkill(BaseSkill):
                         if text.endswith("```"):
                             text = text[:-3]
                         parsed = json.loads(text.strip())
-                        return {"status": "success", "data": parsed, "raw_source": "receipt_image"}
+
+                        amt = float(parsed.get("amount", 0.0))
+                        curr = str(parsed.get("currency", "USD")).upper()
+                        if curr not in ["USD", "IDR"]:
+                            curr = "USD"
+
+                        summary = parsed.get("analysis_summary")
+                        if not summary:
+                            summary = f"Receipt from {parsed.get('merchant', 'Store')} for {curr} {amt:,.2f}."
+
+                        data_payload = {
+                            "analysis_summary": summary,
+                            "merchant": parsed.get("merchant", "Receipt Store"),
+                            "date": parsed.get("date", datetime.now().strftime("%Y-%m-%d")),
+                            "amount": amt,
+                            "currency": curr,
+                            "category": parsed.get("category", "Food & Dining"),
+                            "type": parsed.get("type", "expense"),
+                            "items_summary": parsed.get("items_summary", ""),
+                            "description": parsed.get("notes") or parsed.get("items_summary", ""),
+                            "raw_source": "receipt_image"
+                        }
+                        return {"status": "success", "data": data_payload, "raw_source": "receipt_image"}
                     except Exception as e:
-                        if "404" in str(e) or "NotFound" in str(e) or "not found" in str(e).lower():
+                        last_err = str(e)
+                        if "404" in last_err or "NotFound" in last_err or "not found" in last_err.lower():
                             continue
-                        raise e
-                raise Exception("All candidate vision models failed.")
-            else:
-                # Fallback mock extraction for local testing without API key
-                return {
-                    "status": "success",
-                    "data": {
-                        "merchant": "Receipt Store",
-                        "date": datetime.now().strftime("%Y-%m-%d"),
-                        "amount": 25.00,
-                        "currency": "USD",
-                        "category": "Food & Dining",
-                        "type": "expense",
-                        "items_summary": "Sample item extraction (Configure GEMINI_API_KEY for live Vision OCR)",
-                        "confidence_score": 0.8
-                    },
+                        break
+
+            # Fallback mock extraction for local testing / offline mode without API key
+            return {
+                "status": "success",
+                "data": {
+                    "analysis_summary": "Receipt image uploaded. Review and customize details in the note field below.",
+                    "merchant": "Receipt Store",
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "amount": 0.00,
+                    "currency": "USD",
+                    "category": "Food & Dining",
+                    "type": "expense",
+                    "items_summary": "Receipt image attached",
+                    "description": "Receipt image attached — adjust note details manually.",
                     "raw_source": "receipt_image"
-                }
+                },
+                "raw_source": "receipt_image"
+            }
         except Exception as e:
             return {"status": "error", "message": f"Failed to process receipt image: {str(e)}"}
 

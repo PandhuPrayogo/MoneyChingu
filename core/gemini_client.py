@@ -66,7 +66,7 @@ class GeminiClient:
                     model_name=current_model_name,
                     system_instruction=system_prompt,
                     generation_config={
-                        "temperature": 0.4,
+                        "temperature": 0.2,
                         "top_p": 0.95,
                         "max_output_tokens": 2048,
                     }
@@ -75,8 +75,10 @@ class GeminiClient:
                 # Build content payload
                 contents: List[Any] = []
                 
-                # Format past conversation history
-                for msg in messages_history[-6:]: # Keep last few turns for context economy
+                from core.context_manager import context_manager
+                # Hybrid pruned history for context economy
+                pruned_history = context_manager.prepare_history_for_injection(messages_history)
+                for msg in pruned_history:
                     role = "user" if msg["role"] == "user" else "model"
                     contents.append({"role": role, "parts": [msg["content"]]})
 
@@ -112,9 +114,9 @@ Offline Mode: No Gemini API Key provided.
 Intent: Echo user prompt with sample witty financial response.
 </scratchpad>
 <message>
-Yo! I'm running in **Offline Mode** right now because no `GEMINI_API_KEY` was found in `.env` or the sidebar. 
+Yo! I'm running in **Offline Mode** right now because no `GEMINI_API_KEY` was setting up.
 
-I can still do local SQLite tracking, view your dashboard, and manage budgets! To unlock full AI vision parsing and multimodal chat superpowers, pop your free API key into the sidebar settings! 🔑
+I can still do manual tracking, view your dashboard, and manage budgets! To unlock full AI vision parsing and multimodal chat superpowers, pop your free API key into the settings! 🔑
 </message>"""
 
 # Global singleton
